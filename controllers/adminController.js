@@ -1,26 +1,39 @@
 const User = require('../models/user.model');
 const Slot = require('../models/slot.model');
-const moment = require('moment'); // For date manipulation
+const bcrypt = require('bcrypt');
+const moment = require('moment'); // For date and time  manipulation
 
-// Admin controller functions
+
+
 
 exports.adminLogin = async (req, res, next) => {
   try {
-    // Assuming username and password are sent in the request body
-    const { username, password } = req.body;
-
-    // Find admin user by username (assuming a unique username for admin)
-    const adminUser = await User.findOne({ username, isAdmin: true }); // Check for isAdmin flag
+    const { phoneNumber, password } = req.body;
+    const adminUser = await User.findOne({ phoneNumber, role: "admin" });
+    console.log(adminUser)
     if (!adminUser) {
-      return res.status(401).json({ message: 'Invalid credentials.' }); // Hide specific details
+      return res.status(401).json({ message: 'Invalid credentials.' });
+    }
+    const isPasswordValid = await bcrypt.compare(password, adminUser.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid phone number or password.' });
     }
 
-    // Login successful (replace with appropriate response for security)
-    res.json({ message: 'Admin login successful.' }); // Avoid sending sensitive information
+    const adminDetails = {
+      _id: adminUser._id,
+      name: adminUser.name,
+      role: adminUser.role,
+      phoneNumber: adminUser.phoneNumber,
+    };
+    res.json({
+      message: 'Admin login successful.',
+      adminDetails
+    });
   } catch (error) {
     next(error);
   }
 };
+
 
 
 exports.getTotalUsers = async (req, res, next) => {

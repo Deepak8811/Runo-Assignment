@@ -3,6 +3,7 @@ const User = require('../models/user.model');
 const mongoose = require('mongoose');
 const { isSlotAvailable, isSlotUpdatable, generateTimeSlots } = require('../helpers/helpers');
 
+
 exports.getAvailableSlots = async (req, res, next) => {
   try {
     const { date } = req.query;
@@ -162,6 +163,7 @@ exports.updateSlot = async (req, res, next) => {
     //  else if (newDose === 'second') {
     //   user.secondDoseDateTime = newSlotStartTime;
     // }
+
     if (newDose === 'first') {
       user.firstDoseDateTime = newSlotStartTimeDate;
     } else if (newDose === 'second') {

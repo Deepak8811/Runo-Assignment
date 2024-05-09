@@ -105,32 +105,27 @@ exports.registerSlot = async (req, res, next) => {
 exports.updateSlot = async (req, res, next) => {
   try {
     const { userId } = req.user;
-    // console.log(userId);
     const { slotId, newSlotId, newDose } = req.body;
 
-    // Find user by userId
     const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
-    }
 
     // Find current slot by slotId
-    const currentSlot = await Slot.findOne({ 'timeSlots._id': slotId });
+    const currentSlot = await Slot.findOne({ 'timeSlots._id': slotId, "timeSlots.bookedBy.userId": userId });
     if (!currentSlot) {
       return res.status(404).json({ success: false, message: 'Current slot not found.' });
     }
 
-    // Check if the current slot is associated with the user
-    const currentSlotBooking = currentSlot.timeSlots.find(slot => slot._id.toString() === slotId);
-    console.log(currentSlotBooking);
+    const currentSlotBooking = currentSlot.timeSlots.map(slot => {
+      if (slot._id.toString() === slotId) {
+        const bookedBy = slot.bookedBy.filter(user => user.userId.toString() !== userId)
+        slot.bookedBy = bookedBy;
+        slot.availableDoses += 1;
+      }
+      return slot;
+    });
+    currentSlot.timeSlots = currentSlotBooking;
+    await currentSlot.save();
 
-    const isUserBookedInCurrentSlot = currentSlotBooking.bookedBy.some(booking => booking.userId.equals(userId));
-
-    // console.log(isUserBookedInCurrentSlot);
-
-    if (!isUserBookedInCurrentSlot) {
-      return res.status(400).json({ success: false, message: 'Slot not associated with the current user.' });
-    }
 
     // Find new slot by newSlotId
     const newSlot = await Slot.findOne({ 'timeSlots._id': newSlotId });
@@ -147,52 +142,32 @@ exports.updateSlot = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Current slot cannot be updated within 24 hours of the start time.' });
     }
 
-    const newSlotStartTime = newSlot.timeSlots.find(slot => slot._id.toString() === newSlotId).startTime;
-    const [hoursStr, minutesStr] = newSlotStartTime.split(':');
-    const hours = parseInt(hoursStr, 10);
-    const minutes = parseInt(minutesStr.split(' ')[0], 10);
-
-    // Create a new Date object with the current date and extracted hours and minutes
-    const currentDate = new Date();
-    const newSlotStartTimeDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate(), hours, minutes);
-
-
-    // if (newDose === 'first') {
-    //   user.firstDoseDateTime = newSlotStartTimeDate;
-    // }
-    //  else if (newDose === 'second') {
-    //   user.secondDoseDateTime = newSlotStartTime;
-    // }
 
     if (newDose === 'first') {
-      user.firstDoseDateTime = newSlotStartTimeDate;
+      user.firstDoseDateTime = newSlot.date;
     } else if (newDose === 'second') {
-      // Convert the start time of the new slot to a Date object
-      const newSlotStartTimeDate = new Date(newSlotStartTime);
-      user.secondDoseDateTime = newSlotStartTimeDate;
+      user.secondDoseDateTime = newSlot.date;
     }
 
 
-    // Increase availableDoses count in the current slot and decrease in the new slot
-    currentSlotBooking.availableDoses += 1;
-    // console.log(newSlot)
     newSlot.timeSlots.id(newSlotId).availableDoses -= 1;
 
-
-
-    // Remove the booking details from the current slot
-    currentSlotBooking.bookedBy = currentSlotBooking.bookedBy.filter(booking => !booking.userId.equals(userId));
-
     // Add the booking details to the new slot
-    const newSlotBooking = newSlot.timeSlots.find(slot => slot._id.toString() === newSlotId);
-    newSlotBooking.bookedBy.push({ userId, dose: newDose });
-
-
+    const newSlotBooking = newSlot.timeSlots.map(slot => {
+      if (slot._id.toString() === newSlotId) {
+        slot.bookedBy.push({
+          userId: userId,
+          dose: newDose
+        })
+      }
+      return slot;
+    });
+    newSlot.timeSlots = newSlotBooking;
 
     // Save changes to the user and slots
-    await Promise.all([user.save(), currentSlot.save(), newSlot.save()]);
+    await Promise.all([user.save(), newSlot.save()]);
 
-    res.status(200).json({ success: true, message: 'Slot updated successfully.' });
+    return res.status(200).json({ success: true, message: 'Slot updated successfully.' });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, message: 'Internal server error.' });
